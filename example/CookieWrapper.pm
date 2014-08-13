@@ -8,7 +8,7 @@ sub startup {
     $app->secrets([$ENV{PROXY_COOKIE_SECRET} || 'asfaasdffdfasdf']);
 
     $app->plugin('Mojolicious::Plugin::ReverseProxy',{
-        helper_name => 'zimbra_proxy',
+        helper_name => 'cookie_proxy',
         req_processor => sub {
             my $ctrl= shift;
             my $req = shift;
@@ -39,7 +39,7 @@ sub startup {
     # Normal route to controller
     $r->any('/*catchall' => {catchall => ''})->to(
         cb => sub { 
-            shift->zimbra_proxy('https://zimbra.oetiker.ch/','http://froburg.oetiker.ch:3000/')
+            shift->zimbra_proxy('http://google.com/','http://localhost:3000/')
         }
     );
 }
