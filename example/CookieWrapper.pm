@@ -5,7 +5,7 @@ use Mojo::Base 'Mojolicious';
 sub startup {
     my $app = shift;
 
-    $app->secrets([$ENV{PROXY_COOKIE_SECRET} || 'asfaasdffdfasdf']);
+    $app->secrets(['some secure secret']);
 
     $app->plugin('Mojolicious::Plugin::ReverseProxy',{
         helper_name => 'cookie_proxy',
