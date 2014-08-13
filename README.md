@@ -1,6 +1,9 @@
 Mojolicious::Plugin::ReverseProxy
 =================================
 
+[![Build Status](https://travis-ci.org/oetiker/mojolicious-plugin-reverseproxy.svg?branch=master)](https://travis-ci.org/oetiker/mojolicious-plugin-reverseproxy)
+
+
 A reverse proxy helper plugin for mojolicious
 
 Installation
