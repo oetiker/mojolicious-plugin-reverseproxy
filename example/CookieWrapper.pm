@@ -39,7 +39,7 @@ sub startup {
     # Normal route to controller
     $r->any('/*catchall' => {catchall => ''})->to(
         cb => sub { 
-            shift->zimbra_proxy('http://google.com/','http://localhost:3000/')
+            shift->cookie_proxy('http://google.com/','http://localhost:3000/')
         }
     );
 }
