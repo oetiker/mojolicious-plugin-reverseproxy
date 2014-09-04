@@ -62,6 +62,9 @@ sub register {
             $ctrl->render_later;
             my $tx = $ctrl->$make_req($dest_url,$loc_url);
             $req_processor->($ctrl,$tx->req,$opt) if ref $req_processor eq 'CODE';
+            # if we call $ctrl->rendered in the preprocessor,
+            # we are done ...
+            return if $ctrl->stash('mojo.finished');
             $ua->start($tx, sub {
                 my ($ua,$tx) = @_;
                 my $res = $tx->res;
@@ -147,7 +150,11 @@ user can not alter the cookies.
     $req->headers->remove('cookie');
     my $cookies = $ctrl->session->{cookies};
     $req->cookies(map { { name => $_, value  => $cookies->{$_} } } keys %$cookies);
+    return 0;
  },
+
+If you actually render the page in the req_processor callback, the page will be returned
+immediately without calling the remote end.
 
 =item res_processor
 
