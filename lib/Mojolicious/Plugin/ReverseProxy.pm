@@ -13,7 +13,7 @@ our $VERSION = '0.2';
 
 
 my $make_req = sub {
-    my $ctrl = shift;
+    my $c = shift;
     my $dest_url = shift;
     my $loc_url = shift;
 
@@ -22,16 +22,16 @@ my $make_req = sub {
 
     # prepare requiest
     $nr->url->parse($dest_url);
-    my $req_path = $ctrl->req->url->path;
+    my $req_path = $c->req->url->path;
     my $base_path = Mojo::URL->new($loc_url)->path;
     $req_path =~ s/^\Q${base_path}//;
     $nr->url->path($req_path);
-    $nr->url->query($ctrl->req->url->query);
-    $nr->method($ctrl->req->method);
-    $nr->body($ctrl->req->body);
+    $nr->url->query($c->req->url->query);
+    $nr->method($c->req->method);
+    $nr->body($c->req->body);
 
     # copy headers
-    my $headers = $ctrl->req->headers->to_hash(1);
+    my $headers = $c->req->headers->to_hash(1);
     delete $headers->{Host};
     for (qw(Referer Origin)){
         $headers->{$_}[0] =~ s/^\Q${loc_url}/$dest_url/ 
@@ -53,24 +53,24 @@ sub register {
 
     $app->helper(
         $helper_name => sub {
-            my $ctrl = shift;
+            my $c = shift;
             my $dest_url = shift;
             my $loc_url = shift;
             my $opt = shift;
             $opt->{loc_url} = $loc_url;
             $opt->{dest_url} = $dest_url;
-            $ctrl->render_later;
-            my $tx = $ctrl->$make_req($dest_url,$loc_url);
-            $req_processor->($ctrl,$tx->req,$opt) if ref $req_processor eq 'CODE';
-            # if we call $ctrl->rendered in the preprocessor,
+            $c->render_later;
+            my $tx = $c->$make_req($dest_url,$loc_url);
+            $req_processor->($c,$tx->req,$opt) if ref $req_processor eq 'CODE';
+            # if we call $c->rendered in the preprocessor,
             # we are done ...
-            return if $ctrl->stash('mojo.finished');
+            return if $c->stash('mojo.finished');
             $ua->start($tx, sub {
                 my ($ua,$tx) = @_;
                 my $res = $tx->res;
                 my $err;
                 if ($err = $tx->error and ! exists $err->{code}){
-                    $ctrl->render(status => 500, text => 'ERROR '. $err->{code} . ': ' . $err->{message});
+                    $c->render(status => 500, text => 'ERROR '. $err->{code} . ': ' . $err->{message});
                     return;
                 }
                 $log->debug($res->code);
@@ -80,9 +80,9 @@ sub register {
                         $res->headers->location($location);
                     }
                 }
-                $res_processor->($ctrl,$res,$opt) if ref $res_processor eq 'CODE';
-                $ctrl->tx->res($res);
-                $ctrl->rendered;
+                $res_processor->($c,$res,$opt) if ref $res_processor eq 'CODE';
+                $c->tx->res($res);
+                $c->rendered;
             });
         }
     );
@@ -143,12 +143,12 @@ cookies from our private cookie store in the session. The effect of this is that
 user can not alter the cookies.
 
  req_processor => sub {
-    my $ctrl= shift;
+    my $c= shift;
     my $req = shift;
     my $opt = shift;
     # get cookies from session
     $req->headers->remove('cookie');
-    my $cookies = $ctrl->session->{cookies};
+    my $cookies = $c->session->{cookies};
     $req->cookies(map { { name => $_, value  => $cookies->{$_} } } keys %$cookies);
     return 0;
  },
@@ -163,13 +163,13 @@ Can be pointed to an anonymous subroutine which is called prior to rendering the
 In the example we use this to capture all set-cookie instructions and store them in the session.
 
  res_processor => sub {
-    my $ctrl = shift;
+    my $c = shift;
     my $res = shift;
     my $opt = shift;
     
     # for fun, remove all  the cookies
     my $cookies = $res->cookies;
-    my $session = $ctrl->session;
+    my $session = $c->session;
     for my $cookie (@{$res->cookies}){
         $session->{cookies}{$cookie->name} = $cookie->value;
     }
