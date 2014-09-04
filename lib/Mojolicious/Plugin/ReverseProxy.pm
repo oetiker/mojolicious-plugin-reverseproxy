@@ -9,7 +9,7 @@ use Mojo::UserAgent;
 
 my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
 
-our $VERSION = '0.1';
+our $VERSION = '0.2';
 
 
 my $make_req = sub {
