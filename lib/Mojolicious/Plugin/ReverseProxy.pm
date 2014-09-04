@@ -7,13 +7,12 @@ use Mojo::UserAgent;
 # insttead of using the shared one from app. Who knows
 # what all the others are doing to the poor thing.
 
-my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
-
 our $VERSION = '0.2';
 
+has _ua => sub { Mojo::UserAgent->new( cookie_jar => 0 ); };
 
 my $make_req = sub {
-    my $ctrl = shift;
+    my $c = shift;
     my $dest_url = shift;
     my $loc_url = shift;
 
@@ -22,16 +21,16 @@ my $make_req = sub {
 
     # prepare requiest
     $nr->url->parse($dest_url);
-    my $req_path = $ctrl->req->url->path;
+    my $req_path = $c->req->url->path;
     my $base_path = Mojo::URL->new($loc_url)->path;
     $req_path =~ s/^\Q${base_path}//;
     $nr->url->path($req_path);
-    $nr->url->query($ctrl->req->url->query);
-    $nr->method($ctrl->req->method);
-    $nr->body($ctrl->req->body);
+    $nr->url->query($c->req->url->query);
+    $nr->method($c->req->method);
+    $nr->body($c->req->body);
 
     # copy headers
-    my $headers = $ctrl->req->headers->to_hash(1);
+    my $headers = $c->req->headers->to_hash(1);
     delete $headers->{Host};
     for (qw(Referer Origin)){
         $headers->{$_}[0] =~ s/^\Q${loc_url}/$dest_url/ 
@@ -47,30 +46,41 @@ sub register {
     my $conf = shift;
 
     my $helper_name = $conf->{helper_name} || 'reverse_proxy_to';
-    my $req_processor = $conf->{req_processor};
-    my $res_processor = $conf->{res_processor};
     my $log = $app->log;
+
+    # back compat
+    if (my $cb = $conf->{req_processor}) {
+      $app->hook(after_reverse_proxy_build_tx => sub { shift; $cb->(@_); });
+    }
+    if (my $cb = $conf->{res_processor}) {
+      $app->hook(before_reverse_proxy_render => sub { shift; $cb->(@_); });
+    }
 
     $app->helper(
         $helper_name => sub {
-            my $ctrl = shift;
+            my $c = shift;
             my $dest_url = shift;
             my $loc_url = shift;
             my $opt = shift;
+
+            # What is loc_url and dest_url?
+            # I would supposed loc_url is from the actual request ($c->req->url)
+            # and dest_url is where to proxy server is..?
+            # If so, I suggest just using $c->req->url->to_abs as a default
             $opt->{loc_url} = $loc_url;
             $opt->{dest_url} = $dest_url;
-            $ctrl->render_later;
-            my $tx = $ctrl->$make_req($dest_url,$loc_url);
-            $req_processor->($ctrl,$tx->req,$opt) if ref $req_processor eq 'CODE';
-            # if we call $ctrl->rendered in the preprocessor,
+            $c->render_later;
+            my $tx = $c->$make_req($dest_url,$loc_url);
+            $app->plugins->emit(after_reverse_proxy_build_tx => $c, $tx->req, $opt);
+            # if we call $c->rendered in the preprocessor,
             # we are done ...
-            return if $ctrl->stash('mojo.finished');
-            $ua->start($tx, sub {
+            return if $c->stash('mojo.finished');
+            $self->_ua->start($tx, sub {
                 my ($ua,$tx) = @_;
                 my $res = $tx->res;
                 my $err;
                 if ($err = $tx->error and ! exists $err->{code}){
-                    $ctrl->render(status => 500, text => 'ERROR '. $err->{code} . ': ' . $err->{message});
+                    $c->render(status => 500, text => 'ERROR '. $err->{code} . ': ' . $err->{message});
                     return;
                 }
                 $log->debug($res->code);
@@ -80,9 +90,9 @@ sub register {
                         $res->headers->location($location);
                     }
                 }
-                $res_processor->($ctrl,$res,$opt) if ref $res_processor eq 'CODE';
-                $ctrl->tx->res($res);
-                $ctrl->rendered;
+                $app->plugins->emit(before_reverse_proxy_render => $c, $res, $opt);
+                $c->tx->res($res);
+                $c->rendered;
             });
         }
     );
@@ -133,49 +143,50 @@ The name of the helper to register. The default name is C<reverse_proxy_to>.
 
   helper_name => 'cookie_proxy'
 
-=item req_processor
+=back
 
-Can be pointed to an anonymous subroutine which is called prior to handing controll over to
-the user agent.
+=head2 Hooks
+
+=over
+
+=item after_reverse_proxy_build_tx
+
+This hook is called prior to handing controll over to the user agent.
 
 In the example we remove the cookie header from the request and populate the
 cookies from our private cookie store in the session. The effect of this is that the
 user can not alter the cookies.
 
- req_processor => sub {
-    my $ctrl= shift;
-    my $req = shift;
-    my $opt = shift;
+  $app->hook(after_reverse_proxy_build_tx => sub {
+    my ($app, $c, $req, $opt) = @_;
     # get cookies from session
     $req->headers->remove('cookie');
-    my $cookies = $ctrl->session->{cookies};
+    my $cookies = $c->session->{cookies};
     $req->cookies(map { { name => $_, value  => $cookies->{$_} } } keys %$cookies);
     return 0;
- },
+  });
 
 If you actually render the page in the req_processor callback, the page will be returned
 immediately without calling the remote end.
 
-=item res_processor
+=item before_reverse_proxy_render
 
-Can be pointed to an anonymous subroutine which is called prior to rendering the response.
+This hook is called prior to rendering the response.
 
 In the example we use this to capture all set-cookie instructions and store them in the session.
 
- res_processor => sub {
-    my $ctrl = shift;
-    my $res = shift;
-    my $opt = shift;
+  $app->hook(before_reverse_proxy_render => sub {
+    my ($app, $c, $res, $opt) = @_;
     
     # for fun, remove all  the cookies
     my $cookies = $res->cookies;
-    my $session = $ctrl->session;
+    my $session = $c->session;
     for my $cookie (@{$res->cookies}){
         $session->{cookies}{$cookie->name} = $cookie->value;
     }
     # as the session will get applied later on
     $res->headers->remove('set-cookie');
- }
+  });
 
 =head1 AUTHOR
 
