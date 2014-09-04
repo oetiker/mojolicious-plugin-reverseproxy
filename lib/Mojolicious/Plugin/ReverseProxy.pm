@@ -62,6 +62,11 @@ sub register {
             my $dest_url = shift;
             my $loc_url = shift;
             my $opt = shift;
+
+            # What is loc_url and dest_url?
+            # I would supposed loc_url is from the actual request ($c->req->url)
+            # and dest_url is where to proxy server is..?
+            # If so, I suggest just using $c->req->url->to_abs as a default
             $opt->{loc_url} = $loc_url;
             $opt->{dest_url} = $dest_url;
             $c->render_later;
