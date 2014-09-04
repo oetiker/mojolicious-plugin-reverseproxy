@@ -7,10 +7,9 @@ use Mojo::UserAgent;
 # insttead of using the shared one from app. Who knows
 # what all the others are doing to the poor thing.
 
-my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
-
 our $VERSION = '0.2';
 
+has _ua => sub { Mojo::UserAgent->new( cookie_jar => 0 ); };
 
 my $make_req = sub {
     my $c = shift;
@@ -65,7 +64,7 @@ sub register {
             # if we call $c->rendered in the preprocessor,
             # we are done ...
             return if $c->stash('mojo.finished');
-            $ua->start($tx, sub {
+            $self->_ua->start($tx, sub {
                 my ($ua,$tx) = @_;
                 my $res = $tx->res;
                 my $err;
