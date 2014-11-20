@@ -1,5 +1,12 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
 
+0.4   2014-11-20
+  - just clone the request .. this should be able to better deal with large
+    bodies
+
+0.3   2014-11-19
+  - properly forward the body of POST requests
+
 0.2   2014-09-04
   - return if page is already rendered after preprocessing
 
