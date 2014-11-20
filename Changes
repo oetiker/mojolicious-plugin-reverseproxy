@@ -1,5 +1,10 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
 
+0.5  2014-11-20
+  - fix host header in forwarded request
+  - fix content_length header it seems that at least when IE is posting, the
+    content forwarded by mojo is 2 byte smaller than what came in originally
+
 0.4   2014-11-20
   - just clone the request .. this should be able to better deal with large
     bodies

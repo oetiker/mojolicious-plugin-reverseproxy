@@ -9,7 +9,7 @@ use Mojo::UserAgent;
 
 my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
 
-our $VERSION = '0.4';
+our $VERSION = '0.5';
 
 my $make_req = sub {
     my $ctrl = shift;
@@ -18,13 +18,11 @@ my $make_req = sub {
 
     my $tx = Mojo::Transaction::HTTP->new( req=> $ctrl->req->clone );
     my $headers = $tx->req->headers;
-    $headers->remove('Host');
     for (qw(Referer Origin)){
         my $value = $headers->header($_) || next;
         $value =~ s/^\Q${loc_url}/$dest_url/;
         $headers->header($_ => $value );
     }
-
     my $url = $tx->req->url;
     $url->parse($dest_url);
     $url->query($ctrl->req->url->query);
@@ -32,7 +30,8 @@ my $make_req = sub {
     my $base_path = Mojo::URL->new($loc_url)->path;
     $req_path =~ s/^\Q${base_path}//;
     $url->path($req_path);
-
+    $headers->header('Host',$url->host_port);
+    $headers->content_length(length($tx->req->build_body)) if $headers->content_length;
     return $tx;
 };
 
