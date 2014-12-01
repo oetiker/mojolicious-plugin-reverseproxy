@@ -2,6 +2,7 @@ package Mojolicious::Plugin::ReverseProxy;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::Transaction::HTTP;
 use Mojo::UserAgent;
+use Carp qw(croak);
 
 # let's have our own private unadulterated useragent
 # insttead of using the shared one from app. Who knows
@@ -9,29 +10,21 @@ use Mojo::UserAgent;
 
 my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
 
-our $VERSION = '0.5';
+our $VERSION = '0.7';
 
 my $make_req = sub {
-    my $ctrl = shift;
+    my $c = shift;
     my $dest_url = shift;
-    my $loc_url = shift;
+    my $mount_point = shift;
 
-    my $tx = Mojo::Transaction::HTTP->new( req=> $ctrl->req->clone );
-    my $headers = $tx->req->headers;
-    for (qw(Referer Origin)){
-        my $value = $headers->header($_) || next;
-        $value =~ s/^\Q${loc_url}/$dest_url/;
-        $headers->header($_ => $value );
-    }
+    my $tx = Mojo::Transaction::HTTP->new( req=> $c->req->clone );
     my $url = $tx->req->url;
     $url->parse($dest_url);
-    $url->query($ctrl->req->url->query);
-    my $req_path = $ctrl->req->url->path;
-    my $base_path = Mojo::URL->new($loc_url)->path;
-    $req_path =~ s/^\Q${base_path}//;
+    $url->query($c->req->url->query);
+    my $req_path = $c->req->url->path;
+    $req_path =~ s/^\Q${mount_point}//;
     $url->path($req_path);
-    $headers->header('Host',$url->host_port);
-    $headers->content_length(length($tx->req->build_body)) if $headers->content_length;
+    $tx->req->headers->header('Host',$url->host_port);
     return $tx;
 };
 
@@ -39,46 +32,34 @@ sub register {
     my $self = shift;
     my $app = shift;
     my $conf = shift;
-
-    my $helper_name = $conf->{helper_name} || 'reverse_proxy_to';
+    if ($conf->{helper_name}){
+        die "helper_name is no more. In Mojolicious::Plugin::ReverseProxy 0.6 the API changed radically. Please check the docs.";
+    }
+    my $dest_url = $conf->{destination_url} or die "the destination_url parameter is mandatory";
     my $req_processor = $conf->{req_processor};
     my $res_processor = $conf->{res_processor};
+    my $routes = $conf->{routes} || $app->routes;
+    my $mount_point = $conf->{mount_point} || '';
+    $mount_point =~ s{/$}{};
     my $log = $app->log;
 
-    $app->helper(
-        $helper_name => sub {
-            my $ctrl = shift;
-            my $dest_url = shift;
-            my $loc_url = shift;
-            my $opt = shift;
-            $opt->{loc_url} = $loc_url;
-            $opt->{dest_url} = $dest_url;
-            $ctrl->render_later;
-            my $tx = $ctrl->$make_req($dest_url,$loc_url);
-            $req_processor->($ctrl,$tx->req,$opt) if ref $req_processor eq 'CODE';
-            # if we call $ctrl->rendered in the preprocessor,
-            # we are done ...
-            return if $ctrl->stash('mojo.finished');
-            $ua->start($tx, sub {
-                my ($ua,$tx) = @_;
-                my $res = $tx->res;
-                my $err;
-                if ($err = $tx->error and ! exists $err->{code}){
-                    $ctrl->render(status => 500, text => 'ERROR '. $err->{code} . ': ' . $err->{message});
-                    return;
-                }
-                if ($loc_url and $res->code =~ /^302$/){
-                    my $location = $res->headers->location;
-                    if ($location and $location =~ s/^\Q${dest_url}/$loc_url/){
-                        $res->headers->location($location);
-                    }
-                }
-                $res_processor->($ctrl,$res,$opt) if ref $res_processor eq 'CODE';
-                $ctrl->tx->res($res);
-                $ctrl->rendered;
-            });
-        }
-    );
+    $routes->any($mount_point.'/*catchall' => { catchall => '' })->to(cb => sub {
+        my $c = shift;
+        $c->render_later;
+        my $tx = $c->$make_req($dest_url,$mount_point);
+        $req_processor->($c,$tx->req) if ref $req_processor eq 'CODE';
+        # if we call $c->rendered in the preprocessor,
+        # we are done ...
+        return if $c->stash('mojo.finished');
+
+        $ua->start($tx, sub {
+             my ($ua,$tx) = @_;
+             my $res = $tx->res;
+             $res_processor->($c,$res) if ref $res_processor eq 'CODE';
+             $c->tx->res($res);
+             $c->rendered;
+        });
+    });
 }
 
 1;
@@ -92,83 +73,87 @@ __END__
 
  sub startup {
     my $app = shift;
-    my $pluginOptions = { helper_name => 'proxy_to' };
-    $app->plugin('Mojolicious::Plugin::ReverseProxy',$options);
 
-    # Router
-    my $r = $app->routes;
-    my $callOpt = {};
-    # Normal route to controller
-    $r->any('/*catchall' => {catchall => ''})->to(
-        cb => sub { 
-            shift->proxy_to(
-                'https://google.com',
-                'http://localhost:3000',
-                $callOpts
-            )
-        }
-    );
+    $app->plugin('Mojolicious::Plugin::ReverseProxy',{
+        # mandatory
+        destination_url => 'http://www.oetiker.ch',
+        # optional
+        routes => $app->routes, # default 
+        mount_point => '/', # default
+        req_processor => sub { 
+            my ($c,$req) = @_; 
+            # do something to the request object prior
+            # to passing it on to the destination_url
+            # maybe fix the Origin or Referer headers
+            for (qw(Origin Referer)){
+                my $value = $req->headers->header($_) or next;
+                if ( $value =~ s{http://www.oetiker.ch}{http://localhost:3000} ){
+                    $req->headers->header($_,$value);   
+                }
+            }                
+        },
+        res_processor => sub {
+            my ($c,$res) = @_;
+            # do something to the response object prior
+            # to passing it on to the client
+            # maybe fixing the location header
+            # or absolute URLs in the body
+            if (my $location = $res->headers->location){
+                if ( $location =~ s{http://www.oetiker.ch}{http://localhost:3000} ){
+                    $res->headers->location($location); 
+                }
+            }
+            if ($res->headers->content_type =~ m{text/html} and my $body = $res->body){
+                if ( $body =~ s{http://www.oetiker.ch}{http://localhost:3000}g){
+                    $res->body($body);
+                    $res->headers->content_length(length($body));
+                }
+            }
+        },
+    }
  }
 
 =head1 DESCRIPTION
 
-The Mojolicious::Plugin::ReverseProxy module implements a proxy helper the controller.
-By default it forwards all the headers verbatime except Host, Origin and Referer which
-get re-written. 
+The Mojolicious::Plugin::ReverseProxy lets your register a proxy route. The
+module is rather mindless in the sense that it does not try to help you with
+fixing headers or content to actually work with the proxy, apart from the
+C<Host> and C<Content-Length> headers.
+
+What makes this Plugin really usefil, is that you can supply a
+C<req_processor> and a C<res_processor> callback which will act on the
+request prior to passing it on to the destination and on the response prior
+to returning it to the client respectively.
 
 The plugin takes the following options:
 
 =over
 
-=item helper_name
+=item destination_url
 
-The name of the helper to register. The default name is C<reverse_proxy_to>.
+Where should the proxy connect to
 
-  helper_name => 'cookie_proxy'
+  destination_name => 'http://www.oetiker.ch'
+
+=item routes (defaults to app->routes)
+
+the routes object to use for adding the proxy route
+
+=item mount_point (defaults to /)
+
+under which path should the proxy appear.
 
 =item req_processor
 
-Can be pointed to an anonymous subroutine which is called prior to handing controll over to
-the user agent.
+Can be pointed to an anonymous sub routine which is called prior to handing
+controll over to the user agent.
 
-In the example we remove the cookie header from the request and populate the
-cookies from our private cookie store in the session. The effect of this is that the
-user can not alter the cookies.
-
- req_processor => sub {
-    my $ctrl= shift;
-    my $req = shift;
-    my $opt = shift;
-    # get cookies from session
-    $req->headers->remove('cookie');
-    my $cookies = $ctrl->session->{cookies};
-    $req->cookies(map { { name => $_, value  => $cookies->{$_} } } keys %$cookies);
-    return 0;
- },
-
-If you actually render the page in the req_processor callback, the page will be returned
-immediately without calling the remote end.
+If you render the page in the req_processor callback, the page will be
+returned immediately without calling the destination_url
 
 =item res_processor
 
 Can be pointed to an anonymous subroutine which is called prior to rendering the response.
-
-In the example we use this to capture all set-cookie instructions and store them in the session.
-
- res_processor => sub {
-    my $ctrl = shift;
-    my $res = shift;
-    my $opt = shift;
-    
-    # for fun, remove all  the cookies
-    my $cookies = $res->cookies;
-    my $session = $ctrl->session;
-    for my $cookie (@{$res->cookies}){
-        $session->{cookies}{$cookie->name} = $cookie->value;
-    }
-    # as the session will get applied later on
-    $res->headers->remove('set-cookie');
- }
 
 =head1 AUTHOR
 

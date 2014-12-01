@@ -1,5 +1,13 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
 
+0.7 2014-12-02
+  - Mojolicious 5.63 fixed the content length bug
+    no need for us to work around it anymore
+
+0.6 2014-12-01
+  - new architecture ... by calling the plugin, your route gets installed
+    no helper anymore ... 
+
 0.5  2014-11-20
   - fix host header in forwarded request
   - fix content_length header it seems that at least when IE is posting, the

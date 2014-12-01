@@ -8,7 +8,7 @@ sub startup {
     $app->secrets(['some secure secret']);
 
     $app->plugin('Mojolicious::Plugin::ReverseProxy',{
-        helper_name => 'cookie_proxy',
+        destination_url => 'http://google.com/',
         req_processor => sub {
             my $ctrl= shift;
             my $req = shift;
@@ -33,15 +33,6 @@ sub startup {
             $res->headers->remove('set-cookie');
         }
     });
-
-    # Router
-    my $r = $app->routes;
-    # Normal route to controller
-    $r->any('/*catchall' => {catchall => ''})->to(
-        cb => sub { 
-            shift->cookie_proxy('http://google.com/','http://localhost:3000/')
-        }
-    );
 }
 
 1;
