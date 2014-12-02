@@ -133,7 +133,7 @@ The plugin takes the following options:
 
 Where should the proxy connect to
 
-  destination_name => 'http://www.oetiker.ch'
+  destination_url => 'http://www.oetiker.ch'
 
 =item routes (defaults to app->routes)
 
