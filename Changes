@@ -1,4 +1,6 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
+0.701 2014-12-02
+  - fixed documentation typos
 
 0.7 2014-12-02
   - Mojolicious 5.63 fixed the content length bug

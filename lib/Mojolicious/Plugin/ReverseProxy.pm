@@ -10,7 +10,7 @@ use Carp qw(croak);
 
 my $ua = Mojo::UserAgent->new( cookie_jar => 0 );
 
-our $VERSION = '0.7';
+our $VERSION = '0.701';
 
 my $make_req = sub {
     my $c = shift;
