@@ -1,4 +1,8 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
+0.703 2014-12-23
+  - make destination urls work that do NOT point to the root directory
+    this time for real :)
+
 0.702 2014-12-23
   - make destination urls work that do NOT point to the root directory
 
