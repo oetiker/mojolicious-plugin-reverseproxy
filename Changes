@@ -1,4 +1,7 @@
 Revision history for Mojolicious::Pugin::ReverseProxy
+0.704 2016-09-23
+  - use ignore property in cookie jar ... not having a jar at all seeems not possible anymore
+
 0.703 2014-12-23
   - make destination urls work that do NOT point to the root directory
     this time for real :)
