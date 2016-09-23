@@ -2,6 +2,7 @@ package Mojolicious::Plugin::ReverseProxy;
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::Transaction::HTTP;
 use Mojo::UserAgent;
+use Mojo::URL;
 use Carp qw(croak);
 
 # let's have our own private unadulterated useragent
@@ -10,20 +11,22 @@ use Carp qw(croak);
 
 my $ua = Mojo::UserAgent->new(cookie_jar => Mojo::UserAgent::CookieJar->new(ignore => sub { 1 }));
 
-our $VERSION = '0.704';
+our $VERSION = '0.705';
 
 my $make_req = sub {
     my $c = shift;
-    my $dest_url = shift;
+    my $dest_url = Mojo::URL->new(shift);
     my $mount_point = shift;
     my $tx = Mojo::Transaction::HTTP->new( req=> $c->req->clone );
     my $url = $tx->req->url;
-    $url->parse($dest_url);
-    $url->query($c->req->url->query);
-    my $req_path = $c->req->url->path;
-    $req_path =~ s[^\Q${mount_point}\E/*][];
-    $url->path->trailing_slash(1);
-    $url->path($req_path);
+    $url->scheme($dest_url->scheme);
+    $url->host($dest_url->host);
+    $url->port($dest_url->port);
+    if ($mount_point){
+        my $req_path = $url->path;
+        $req_path =~ s[^\Q${mount_point}\E/*][];
+        $url->path($req_path);
+    }
     $tx->req->headers->header('Host',$url->host_port);
     return $tx;
 };
@@ -51,7 +54,6 @@ sub register {
         # if we call $c->rendered in the preprocessor,
         # we are done ...
         return if $c->stash('mojo.finished');
-
         $ua->start($tx, sub {
              my ($ua,$tx) = @_;
              my $res = $tx->res;
