@@ -24,7 +24,7 @@ my $make_req = sub {
     $url->port($dest_url->port);
     if ($mount_point){
         my $req_path = $url->path;
-        $req_path =~ s[^\Q${mount_point}\E/*][];
+        $req_path =~ s[^\Q${mount_point}\E][];
         $url->path($req_path);
     }
     $tx->req->headers->header('Host',$url->host_port);
