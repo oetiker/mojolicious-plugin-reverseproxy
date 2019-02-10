@@ -11,7 +11,7 @@ use Carp qw(croak);
 
 my $ua = Mojo::UserAgent->new(cookie_jar => Mojo::UserAgent::CookieJar->new(ignore => sub { 1 }));
 
-our $VERSION = '0.705';
+our $VERSION = '0.706';
 
 my $make_req = sub {
     my $c = shift;
