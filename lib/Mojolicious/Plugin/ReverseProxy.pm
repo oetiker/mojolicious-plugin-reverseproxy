@@ -70,7 +70,11 @@ sub register {
 
 __END__
 
-=head1 Mojolicious::Plugin::ReverseProxy
+=head1 NAME
+
+Mojolicious::Plugin::ReverseProxy - ReverseProxy plugin for the Mojolicious Perl framework.
+
+=head1 SYNOPSIS
  
  package ProxyFun;
  use Mojo::Base 'Mojolicious';
